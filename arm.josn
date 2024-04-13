@@ -1,0 +1,265 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storagePrefix": {
+            "defaultValue": "ntmssa",
+            "minLength": 3,
+            "maxLength": 11,
+            "type": "String"
+        },
+        "vmSize": {
+            "defaultValue": "Standard_B1MS",
+            "allowedValues": [
+                "Standard_B1ms",
+                "Standard_B2ms",
+                "Standard_DS1_v2"
+            ],
+            "type": "String"
+        },
+        "number-of-webvms": {
+            "defaultValue": 2,
+            "minValue": 1,
+            "maxValue": 3,
+            "type": "Int",
+            "metadata": {
+                "description": "The number of VMs to create."
+            }
+        }
+    },
+    "variables": {
+        "vnet": "3-tier-app-vnet",
+        "websubnet": "websubnet",
+        "appsubnet": "appsubnet",
+        "dbsubnet": "dbsubnet",
+        "webasgName": "webasg",
+        "webasgId": "[resourceId('Microsoft.Network/applicationSecurityGroups',variables('webasgName'))]",
+        "webnicname": "webnic",
+        "webVMname": "web",
+        "webnsg": "webnsg",
+        "StorageName": "[concat(parameters('storageprefix'), uniqueString(resourceGroup().id))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/applicationSecurityGroups",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('webasgName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {}
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('StorageName')]",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "windowsVM1 Storage Account"
+            },
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "Storage"
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2019-11-01",
+            "name": "[variables('vnet')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('webnsg'))]"
+            ],
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "10.1.0.0/16"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "websubnet",
+                        "properties": {
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('webnsg'))]"
+                            },
+                            "addressPrefix": "10.1.1.0/24"
+                        }
+                    },
+                    {
+                        "name": "appsubnet",
+                        "properties": {
+                            "addressPrefix": "10.1.2.0/24"
+                        }
+                    },
+                    {
+                        "name": "dbsubnet",
+                        "properties": {
+                            "addressPrefix": "10.1.3.0/24"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2019-11-01",
+            "name": "[concat(variables('webnicName'), copyindex())]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', variables('vnet'))]"
+            ],
+            "tags": {
+                "displayName": "NTMSVM Network Interface"
+            },
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipConfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnet'), variables('webSubnet'))]"
+                            },
+                            "applicationSecurityGroups": [
+                                {
+                                    "id": "[variables('webasgId')]"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "copy": {
+                "name": "nicLoop",
+                "count": "[parameters('number-Of-webVms')]"
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2020-05-01",
+            "name": "[variables('webnsg')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[variables('webasgName')]"
+            ],
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "web",
+                        "properties": {
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "80",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 110,
+                            "direction": "Inbound",
+                            "sourcePortRanges": [],
+                            "destinationPortRanges": [],
+                            "sourceAddressPrefixes": [],
+                            "destinationAddressPrefixes": []
+                        }
+                    },
+                    {
+                        "name": "Port_3389_22",
+                        "properties": {
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 120,
+                            "direction": "Inbound",
+                            "sourcePortRanges": [],
+                            "destinationPortRanges": [
+                                "3389",
+                                "22"
+                            ],
+                            "sourceAddressPrefixes": [],
+                            "destinationAddressPrefixes": []
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2019-07-01",
+            "name": "[concat(variables('webvmname'), copyindex())]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storagename'))]",
+                "[concat('Microsoft.Network/networkInterfaces/', variables('webnicname'),copyindex())]"
+            ],
+            "tags": {
+                "displayName": "[concat(variables('webvmname'),copyindex())]"
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vmsize')]"
+                },
+                "osProfile": {
+                    "computerName": "[concat(variables('webvmname'), copyindex())]",
+                    "adminUsername": "vmadmin",
+                    "adminPassword": "123#ntms123#"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "MicrosoftWindowsServer",
+                        "offer": "WindowsServer",
+                        "sku": "2016-Datacenter",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "[concat(variables('webvmname'),'osdisk', copyindex())]",
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces',concat(variables('webnicName'),copyindex()))]"
+                        }
+                    ]
+                },
+                "diagnosticsProfile": {
+                    "bootDiagnostics": {
+                        "enabled": true,
+                        "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts/', variables('storagename'))).primaryEndpoints.blob]"
+                    }
+                }
+            },
+            "copy": {
+                "name": "virtualMachineLoop",
+                "count": "[parameters('number-Of-webVms')]"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "apiVersion": "2019-12-01",
+            "name": "[concat(variables('webvmName'),copyindex(),'/', 'InstallWebServer')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/',variables('webvmName'),copyIndex())]"
+            ],
+            "properties": {
+                "publisher": "Microsoft.Compute",
+                "type": "CustomScriptExtension",
+                "typeHandlerVersion": "1.7",
+                "autoUpgradeMinorVersion": true,
+                "settings": {
+                    "fileUris": [
+                        "https://csg10032000dbb347f6.blob.core.windows.net/scripts/iis-with-webdeploy.ps1"
+                    ],
+                    "commandToExecute": "powershell.exe -ExecutionPolicy Unrestricted -File iis-with-webdeploy.ps1"
+                }
+            },
+            "copy": {
+                "name": "virtualMachineLoop",
+                "count": "[parameters('number-Of-webVms')]"
+            }
+        }
+    ],
+    "outputs": {}
+}
