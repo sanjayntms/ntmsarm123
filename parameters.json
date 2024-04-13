@@ -1,0 +1,15 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storagePrefix": {
+            "value": "ntmssa"
+        },
+        "vmSize": {
+            "value": "Standard_B1ms"
+        },
+        "number-of-webvms": {
+            "value": 2
+        }
+    }
+}
